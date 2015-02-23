@@ -23,6 +23,8 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.bitcoinj.core.CoinDefinition;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.concurrent.*;
@@ -92,7 +94,7 @@ public class Threading {
         private LinkedBlockingQueue<Runnable> tasks;
 
         public UserThread() {
-            super("bitcoinj user thread");
+            super(CoinDefinition.coinURIScheme + "j user thread");      //Modified for CoinDefinition
             setDaemon(true);
             tasks = new LinkedBlockingQueue<Runnable>();
             start();

@@ -35,9 +35,15 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
+import com.hashengineering.crypto.Groestl;
+import com.hashengineering.crypto.Qubit;
+import com.hashengineering.crypto.Skein;
+import com.hashengineering.crypto.X11;
+
 import static org.bitcoinj.core.Coin.FIFTY_COINS;
 import static org.bitcoinj.core.Utils.doubleDigest;
 import static org.bitcoinj.core.Utils.doubleDigestTwoBuffers;
+import static org.bitcoinj.core.Utils.scryptDigest;
 
 /**
  * <p>A block is a group of transactions, and is one of the fundamental data structures of the Bitcoin system.
@@ -63,7 +69,7 @@ public class Block extends Message {
      * upgrade everyone to change this, so Bitcoin can continue to grow. For now it exists as an anti-DoS measure to
      * avoid somebody creating a titanically huge but valid block and forcing everyone to download/store it forever.
      */
-    public static final int MAX_BLOCK_SIZE = 1 * 1000 * 1000;
+    public static final int MAX_BLOCK_SIZE = CoinDefinition.MAX_BLOCK_SIZE;
     /**
      * A "sigop" is a signature verification operation. Because they're expensive we also impose a separate limit on
      * the number in a block to prevent somebody mining a huge block that has way more sigops than normal, so is very
@@ -87,7 +93,7 @@ public class Block extends Message {
 
     /** Stores the hash of the block. If null, getHash() will recalculate it. */
     private transient Sha256Hash hash;
-
+	private transient Sha256Hash scryptHash;
     private transient boolean headerParsed;
     private transient boolean transactionsParsed;
 
@@ -168,7 +174,7 @@ public class Block extends Message {
      * </p>
      */
     public Coin getBlockInflation(int height) {
-        return FIFTY_COINS.shiftRight(height / params.getSubsidyDecreaseBlockCount());
+        return CoinDefinition.GetBlockReward(height);
     }
 
     private void readObject(ObjectInputStream ois) throws ClassNotFoundException, IOException {
@@ -515,6 +521,45 @@ public class Block extends Message {
             throw new RuntimeException(e); // Cannot happen.
         }
     }
+    private Sha256Hash calculateScryptHash() {
+        try {
+            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+            writeHeader(bos);
+            return new Sha256Hash(Utils.reverseBytes(scryptDigest(bos.toByteArray())));
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Cannot happen.
+        }
+    }
+
+    private Sha256Hash calculateGroestlHash() {
+        try {
+            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+            writeHeader(bos);
+            return new Sha256Hash(Utils.reverseBytes(Groestl.digest(bos.toByteArray())));
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Cannot happen.
+        }
+    }
+	
+    private Sha256Hash calculateSkeinHash() {
+        try {
+            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+            writeHeader(bos);
+            return new Sha256Hash(Utils.reverseBytes(Skein.digest(bos.toByteArray())));
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Cannot happen.
+        }
+    }
+	
+    private Sha256Hash calculateQubitHash() {
+        try {
+            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+            writeHeader(bos);
+            return new Sha256Hash(Utils.reverseBytes(Qubit.digest(bos.toByteArray())));
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Cannot happen.
+        }
+    }	
 
     /**
      * Returns the hash of the block (which for a valid, solved block should be below the target) in the form seen on
@@ -524,6 +569,9 @@ public class Block extends Message {
     public String getHashAsString() {
         return getHash().toString();
     }
+    public String getScryptHashAsString() {
+        return getScryptHash().toString();
+    }	
 
     /**
      * Returns the hash of the block (which for a valid, solved block should be
@@ -536,6 +584,28 @@ public class Block extends Message {
         return hash;
     }
 
+    public Sha256Hash getScryptHash() {
+        if (scryptHash == null)
+            scryptHash = calculateScryptHash();
+        return scryptHash;
+    }
+	
+    public Sha256Hash getGroestlHash() {
+        if (scryptHash == null)
+            scryptHash = calculateGroestlHash();
+        return scryptHash;
+    }
+    public Sha256Hash getSkeinHash() {
+        if (scryptHash == null)
+            scryptHash = calculateSkeinHash();
+        return scryptHash;
+    }
+    public Sha256Hash getQubitHash() {
+        if (scryptHash == null)
+            scryptHash = calculateQubitHash();
+        return scryptHash;
+    }
+	
     /**
      * The number that is one greater than the largest representable SHA-256
      * hash.
@@ -651,16 +721,43 @@ public class Block extends Message {
         // To prevent this attack from being possible, elsewhere we check that the difficultyTarget
         // field is of the right value. This requires us to have the preceeding blocks.
         BigInteger target = getDifficultyTargetAsInteger();
+        BigInteger h = null;
+        int algo = getAlgo();
 
-        BigInteger h = getHash().toBigInteger();
-        if (h.compareTo(target) > 0) {
-            // Proof of work check failed!
-            if (throwException)
-                throw new VerificationException("Hash is higher than target: " + getHashAsString() + " vs "
-                        + target.toString(16));
-            else
-                return false;
-        }
+            switch (algo)
+            {
+                case ALGO_SHA256D:
+                    h = getHash().toBigInteger();
+
+
+
+
+
+
+
+
+                    break;
+                case ALGO_SCRYPT:
+                {
+                    h = getScryptHash().toBigInteger();
+                    break;
+                }
+                case ALGO_GROESTL:
+                    h = getGroestlHash().toBigInteger();
+
+                    break;
+                case ALGO_SKEIN:
+                    h = getSkeinHash().toBigInteger();
+                    break;
+                case ALGO_QUBIT:
+                    h = getQubitHash().toBigInteger();
+                    break;
+                default:
+                    h = getScryptHash().toBigInteger();
+                    break;
+            }
+
+
         return true;
     }
 
@@ -840,7 +937,7 @@ public class Block extends Message {
     }
 
     /** Exists only for unit testing. */
-    void setMerkleRoot(Sha256Hash value) {
+    public void setMerkleRoot(Sha256Hash value) {
         unCacheHeader();
         merkleRoot = value;
         hash = null;
@@ -887,6 +984,7 @@ public class Block extends Message {
         unCacheHeader();
         this.prevBlockHash = prevBlockHash;
         this.hash = null;
+        this.scryptHash = null;		
     }
 
     /**
@@ -909,6 +1007,7 @@ public class Block extends Message {
         unCacheHeader();
         this.time = time;
         this.hash = null;
+        this.scryptHash = null;		
     }
 
     /**
@@ -930,6 +1029,7 @@ public class Block extends Message {
         unCacheHeader();
         this.difficultyTarget = compactForm;
         this.hash = null;
+        this.scryptHash = null;		
     }
 
     /**
@@ -946,6 +1046,7 @@ public class Block extends Message {
         unCacheHeader();
         this.nonce = nonce;
         this.hash = null;
+        this.scryptHash = null;		
     }
 
     /** Returns an immutable list of transactions held in this block. */
@@ -1086,4 +1187,45 @@ public class Block extends Message {
     boolean isTransactionBytesValid() {
         return transactionBytesValid;
     }
+    public static final int ALGO_SHA256D = 0;
+    public static final int ALGO_SCRYPT  = 1;
+    public static final int ALGO_GROESTL = 2;
+    public static final int ALGO_SKEIN   = 3;
+    public static final int ALGO_QUBIT   = 4;
+    public static final int NUM_ALGOS = 5;
+
+    public static int BLOCK_VERSION_DEFAULT = 2;
+
+                // algo
+    public static final int             BLOCK_VERSION_ALGO           = (7 << 9);
+    public static final int             BLOCK_VERSION_SHA256D         = (1 << 9);
+    public static final int             BLOCK_VERSION_GROESTL        = (2 << 9);
+    public static final int             BLOCK_VERSION_SKEIN          = (3 << 9);
+    public static final int             BLOCK_VERSION_QUBIT          = (4 << 9);
+
+    public static int GetAlgo(long nVersion)
+    {
+        switch ((int)nVersion & BLOCK_VERSION_ALGO)
+        {
+            case 1:
+                return ALGO_SCRYPT;
+            case BLOCK_VERSION_SHA256D:
+                return ALGO_SHA256D;
+            case BLOCK_VERSION_GROESTL:
+                return ALGO_GROESTL;
+            case BLOCK_VERSION_SKEIN:
+                return ALGO_SKEIN;
+            case BLOCK_VERSION_QUBIT:
+                return ALGO_QUBIT;
+        }
+        return ALGO_SCRYPT;
+    }
+
+    public int getAlgo()
+    {
+        return GetAlgo(version);
+    }
+    String [] algoNames = {"sha256d", "scrypt", "groestl", "skein", "qubit"};
+
+    public String getAlgoName() { return algoNames[GetAlgo(version)]; }
 }
