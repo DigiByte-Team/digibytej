@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.bitcoinj</groupId>
-  <artifactId>bitcoinj-parent</artifactId>
+  <artifactId>digibytej-parent</artifactId>
   <version>0.13-SNAPSHOT</version>
   <packaging>pom</packaging>
 
@@ -21,9 +21,9 @@
   </parent>
 
   <scm>
-    <connection>scm:git:https://github.com/bitcoinj/bitcoinj</connection>
-    <developerConnection>scm:git:https://github.com/bitcoinj/bitcoinj</developerConnection>
-    <url>scm:git:https://github.com/bitcoinj/bitcoinj</url>
+    <connection>scm:git:https://github.com/DigiByte-Team/digibytej</connection>
+    <developerConnection>scm:git:https://github.com/DigiByte-Team/digibytej</developerConnection>
+    <url>scm:git:https://github.com/DigiByte-Team/digibytej</url>
   </scm>
 
   <name>bitcoinj Parent</name>
